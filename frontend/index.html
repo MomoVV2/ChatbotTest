@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local AI Support Agent</title>
+    <style>
+        /* Existing styles remain the same */
+        :root {
+            --primary: #2d3436;
+            --secondary: #0984e3;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .chat-container {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            min-height: 400px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-history {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin: 0.5rem 0;
+            padding: 0.8rem;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+
+        .user-message {
+            background: var(--secondary);
+            color: white;
+            margin-left: auto;
+        }
+
+        .bot-message {
+            background: #fff;
+            border: 1px solid #ddd;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 0.5rem;
+            padding: 1rem;
+            border-top: 1px solid #ddd;
+        }
+
+        input {
+            flex: 1;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 0.8rem 1.5rem;
+            background: var(--secondary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .loading {
+            display: none;
+            color: #666;
+            text-align: center;
+            padding: 1rem;
+        }
+
+        .error {
+            color: #e74c3c;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        /* New typing indicator style */
+        .typing-indicator {
+            display: inline-block;
+            padding: 8px;
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid #ddd;
+        }
+        .typing-dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            margin-right: 3px;
+            background: #ddd;
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+        @keyframes typing {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+    </style>
+</head>
+<body>
+    <h1>🛠️ Local AI Support Agent</h1>
+    <div class="chat-container">
+        <div class="chat-history" id="chatHistory">
+            <div class="message bot-message">
+                Hello! I'm your local AI support agent. Ask me anything about your documentation!
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            ⏳ Analyzing your question...
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <div class="input-container">
+            <input type="text" id="questionInput" placeholder="Type your question...">
+            <button onclick="askQuestion()">Ask</button>
+        </div>
+    </div>
+
+    <script>
+        const chatHistory = document.getElementById('chatHistory');
+        const questionInput = document.getElementById('questionInput');
+        const loading = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+    
+        questionInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') askQuestion();
+        });
+    
+        async function askQuestion() {
+            const question = questionInput.value.trim();
+            if (!question) return;
+    
+            try {
+                loading.style.display = 'block';
+                errorDiv.textContent = '';
+                addMessage(question, 'user');
+                questionInput.value = '';
+    
+                const response = await fetch('http://localhost:3000/ask', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question })
+                });
+    
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    
+                await processStreamedResponse(response); // Process streamed response
+    
+            } catch (error) {
+                showError(`Error: ${error.message}`);
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+    
+        async function processStreamedResponse(response) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+    
+            const typingIndicator = createTypingIndicator();
+            chatHistory.appendChild(typingIndicator);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+    
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split("\n");
+    
+                    for (let i = 0; i < lines.length - 1; i++) {
+                        const line = lines[i].trim();
+                        if (!line) continue;
+    
+                        try {
+                            const json = JSON.parse(line);
+                            if (json.message) {
+                                if (typingIndicator.isConnected) {
+                                    typingIndicator.remove();
+                                }
+                                addMessage(json.message, 'bot');
+                            }
+                        } catch (e) {
+                            console.error("Invalid JSON chunk:", line);
+                        }
+                    }
+    
+                    buffer = lines[lines.length - 1]; // Keep the last partial line
+                }
+            } catch (error) {
+                console.error('Stream processing error:', error);
+                showError(`Error: ${error.message}`);
+            } finally {
+                if (typingIndicator.isConnected) {
+                    typingIndicator.remove();
+                }
+            }
+        }
+    
+        function createTypingIndicator() {
+            const div = document.createElement('div');
+            div.className = 'message bot-message typing-indicator';
+            div.innerHTML = `
+                <div class="typing-dot" style="animation-delay: 0s"></div>
+                <div class="typing-dot" style="animation-delay: 0.2s"></div>
+                <div class="typing-dot" style="animation-delay: 0.4s"></div>
+            `;
+            return div;
+        }
+    
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+    
+            const formattedText = text
+                .replace(/\n/g, '<br>')
+                .replace(/•/g, '•')
+                .replace(/\*{2}(.*?)\*{2}/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+            messageDiv.innerHTML = formattedText;
+            chatHistory.appendChild(messageDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+    
+        function showError(message) {
+            errorDiv.textContent = message;
+            setTimeout(() => {
+                errorDiv.textContent = '';
+            }, 5000);
+        }
+    </script>
+    
+</body>
+</html>
