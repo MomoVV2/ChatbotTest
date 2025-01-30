@@ -1,8 +1,14 @@
-const express = require('express');
-const cors = require('cors');
-const fs = require('fs').promises;
-const path = require('path');
-const { setupVectorStore, getEmbedding } = require('./rag');
+import express from 'express';
+import cors from 'cors';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { setupVectorStore, getEmbedding } from './rag.js';
+import fetch from 'node-fetch';
+
+// ES Module __dirname polyfill
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
@@ -43,7 +49,6 @@ async function loadPersonaConfig() {
       }
     });
 
-    // Ensure responseGuidelines exists
     persona.responseGuidelines = persona.responseGuidelines || [];
     return persona;
   } catch (error) {
@@ -58,10 +63,7 @@ async function loadPersonaConfig() {
 
 async function initializeSystem() {
   try {
-    // Load persona configuration
     AI_PERSONA = await loadPersonaConfig();
-    
-    // Initialize RAG system
     const ragSystem = await setupVectorStore(FAQ_FILE);
     vectorStore = ragSystem.vectorStore;
     intentRecognizer = ragSystem.intentRecognizer;
@@ -74,7 +76,6 @@ async function initializeSystem() {
   }
 }
 
-// Initialize the system once
 initializeSystem().catch(error => {
   console.error("Critical initialization failed:", error);
   process.exit(1);
@@ -97,9 +98,8 @@ app.post('/ask', async (req, res) => {
 
   try {
       let responseSent = false;
-
-      // Intent-based response
       const intent = await intentRecognizer.detectIntent(question);
+      
       if (intent) {
           const intentDetails = intentRecognizer.intents.get(intent.name);
           const intentAnswer = await generateDynamicAnswer(
@@ -112,11 +112,9 @@ app.post('/ask', async (req, res) => {
           compactMessages.forEach(message => {
               res.write(JSON.stringify({ message }) + "\n");
           });
-
           responseSent = true;
       }
 
-      // Database-based response
       if (!responseSent) {
           const queryEmbedding = await getEmbedding(question);
           const results = vectorStore.similaritySearch(queryEmbedding, 5);
@@ -127,20 +125,20 @@ app.post('/ask', async (req, res) => {
                   .join('\n\n');
 
               const dbAnswer = await generateDynamicAnswer(context, question, AI_PERSONA);
-
               const compactMessages = chunkLines(dbAnswer.split("\n"), 4);
               compactMessages.forEach(message => {
                   res.write(JSON.stringify({ message }) + "\n");
               });
-
               responseSent = true;
           }
       }
 
-      // Fallback response
       if (!responseSent) {
-          const fallbackAnswer = await generateDynamicAnswer("I couldn’t find a match, but here’s what I think:", question, AI_PERSONA);
-
+          const fallbackAnswer = await generateDynamicAnswer(
+              "I couldn’t find a match, but here’s what I think:", 
+              question, 
+              AI_PERSONA
+          );
           const compactMessages = chunkLines(fallbackAnswer.split("\n"), 4);
           compactMessages.forEach(message => {
               res.write(JSON.stringify({ message }) + "\n");
@@ -155,7 +153,6 @@ app.post('/ask', async (req, res) => {
   }
 });
 
-// Helper function: group lines into chunks of N lines
 function chunkLines(lines, maxLines) {
   const chunks = [];
   for (let i = 0; i < lines.length; i += maxLines) {
@@ -164,10 +161,8 @@ function chunkLines(lines, maxLines) {
   return chunks;
 }
 
-// AI Response Generator with Safety Checks
 async function generateDynamicAnswer(context, question, persona) {
   try {
-    // Safeguard against undefined guidelines
     const safePersona = {
       name: persona.name || "Assistant",
       style: persona.style || "Helpful technical support",
@@ -178,10 +173,7 @@ async function generateDynamicAnswer(context, question, persona) {
       .map((g, i) => `${i+1}. ${g}`)
       .join('\n') || '1. Provide the best possible answer';
 
-    // Removed 'Adds personality' from the request. 
-    // Also explicitly forbid greetings, emojis, personal commentary:
-// Updated responsePrompt in generateDynamicAnswer
-const responsePrompt = `[INST] You are ${safePersona.name}, ${safePersona.style}.
+    const responsePrompt = `[INST] You are ${safePersona.name}, ${safePersona.style}.
 Guidelines:
 ${guidelines}
 
@@ -216,23 +208,23 @@ For additional help:
 ${context ? 'Use context where relevant' : ''}
 [/INST]`;
 
-    const response = await fetch('http://localhost:11434/api/generate', {
+    const response = await fetch('http://127.0.0.1:11434/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'mistral',
         prompt: responsePrompt,
         stream: false,
-options: {
-  temperature: 0.7,  // Slightly higher for better formatting
-  num_predict: 300,
-  repeat_penalty: 1.5,  // Reduce repetition
-  top_k: 50,
-  top_p: 0.9,
-  mirostat: 2,  // Enable mirostat for better coherence
-  mirostat_tau: 5.0,
-  mirostat_eta: 0.1
-}
+        options: {
+          temperature: 0.7,
+          num_predict: 300,
+          repeat_penalty: 1.5,
+          top_k: 50,
+          top_p: 0.9,
+          mirostat: 2,
+          mirostat_tau: 5.0,
+          mirostat_eta: 0.1
+        }
       })
     });
 
@@ -247,30 +239,19 @@ options: {
     }
 
     let finalText = data.response
-      // Remove the [INST] wrappers if they appear
       .replace(/\[INST\].*\[\/INST\]/gs, '')
       .trim();
 
-    // 1) Remove lines that begin with typical greetings
-    finalText = finalText.replace(/^(hello|hi|hey|greetings)[^\n]*\n?/gim, '');
-
-    // 2) Remove lines starting with "It seems like" or "It looks like"
-    finalText = finalText.replace(/^(it\s+seems\s+like|it\s+looks\s+like).*\n?/gim, '');
-
-    // 3) Remove common emojis (quick approach using a broad range)
-    // This removes typical emojis (Unicode range 1F300–1FAFF)
-    finalText = finalText.replace(/[\u{1F300}-\u{1FAFF}]/gu, '');
-    
     finalText = finalText
-    .replace(/([*\-➢])/g, '•')  // Standardize bullets
-    .replace(/(•\s.*?)(\n+)(•)/g, '$1\n$3')  // Ensure single newline between list items
-    .replace(/(•.*\n)([^\n•])/g, '$1\n\n$2')  // Ensure extra spacing after bullet lists
-    .replace(/\n{3,}/g, '\n\n')  // Remove excessive line breaks
-    .replace(/(.{120,}?)\s/g, '$1\n')  // Auto-wrap long paragraphs at ~120 characters
-    .trim();
-  
-    // 4) Optionally remove exclamation points if you want a more neutral tone
-    // finalText = finalText.replace(/!/g, '');
+      .replace(/^(hello|hi|hey|greetings)[^\n]*\n?/gim, '')
+      .replace(/^(it\s+seems\s+like|it\s+looks\s+like).*\n?/gim, '')
+      .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
+      .replace(/([*\-➢])/g, '•')
+      .replace(/(•\s.*?)(\n+)(•)/g, '$1\n$3')
+      .replace(/(•.*\n)([^\n•])/g, '$1\n\n$2')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/(.{120,}?)\s/g, '$1\n')
+      .trim();
 
     return finalText;
 

@@ -1,6 +1,22 @@
-const path = require('path');
-const fs = require('fs').promises;
-const pdfParse = require('pdf-parse');
+import path from 'path';
+import pdfjs from 'pdfjs-dist';
+const { getDocument } = pdfjs;
+import { promises as fs } from 'fs';
+import canvas from 'canvas';
+import { fileURLToPath } from 'url';
+import fetch from 'node-fetch';
+
+// ES Module __dirname polyfill
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Configure PDF.js for Node.js
+const { createCanvas } = canvas;
+// Replace the worker config with:
+pdfjs.GlobalWorkerOptions.workerSrc = path.join(
+  __dirname,
+  '../node_modules/pdfjs-dist/build/pdf.worker.js'
+);
 
 class Document {
   constructor({ pageContent, metadata }) {
@@ -77,30 +93,25 @@ class IntentRecognizer {
   async generateDynamicAnswer(intent, contextDocs, query) {
     const context = contextDocs.map(d => d.pageContent).join('\n');
     
-    const prompt = `[STRICT FORMATTING RULES]
-- Answer directly without greetings
-- Use ONLY "•" for bullet points
-- Max 3 bullets per section
-- Max 200 characters per message part
-- NEVER use markdown or links
-- Separate sections with blank lines
-
-Context: ${context}
-
-Question: ${query}
-
-Concise, split answer:`;
-
-    const response = await fetch('http://localhost:11434/api/generate', {
+    const prompt = `<|im_start|>system
+    You are a mobile-first support bot. Respond ONLY in this format:
+    •[Action] [Details] (max 7 words)
+    Max 3 bullet points. No explanations.<|im_end|>
+    <|im_start|>user
+    ${query}<|im_end|>
+    <|im_start|>assistant
+    `;
+  
+    const response = await fetch('http://127.0.0.1:11434/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'llama2',
+        model: 'deepseek-r1:1.5b',
         prompt: prompt,
-        stream: false,
         options: {
-          max_tokens: 1200,
-          temperature: 0.3
+          temperature: 0.3,
+          max_tokens: 80,
+          repeat_penalty: 2.5
         }
       })
     });
@@ -120,45 +131,16 @@ Concise, split answer:`;
 
   cleanResponse(text) {
     return text
-      .replace(/[*-]>\s?/g, '• ')   // Normalize bullets
-      .replace(/\[\d+\]/g, '')      // Remove citations
-      .replace(/\(http\S+\)/g, '')  // Remove URLs
-      .replace(/\n{3,}/g, '\n\n')   // Limit newlines
-      .replace(/^\s*[\r\n]/gm, '')  // Remove empty lines
-      .trim();
+      .replace(/[^•\w\s]/g, '') // Remove all punctuation
+      .replace(/\s+/g, ' ')     // Single spaces only
+      .substring(0, 80);        // Hard character limit
   }
+  
 
   splitIntoMessages(text) {
-    const MAX_LENGTH = 200;
-    const messages = [];
-    let currentMessage = '';
-    
-    const sections = text.split(/(?:\n\s*){2,}/);
-    
-    for (const section of sections) {
-      const lines = section.split('\n');
-      
-      for (const line of lines) {
-        if ((currentMessage + line).length > MAX_LENGTH) {
-          messages.push(currentMessage.trim());
-          currentMessage = '';
-        }
-        currentMessage += line + '\n';
-        
-        // Split at natural breaks
-        if (line.startsWith('•') && currentMessage.length > MAX_LENGTH/2) {
-          messages.push(currentMessage.trim());
-          currentMessage = '';
-        }
-      }
-      
-      if (currentMessage.length > 0) {
-        messages.push(currentMessage.trim());
-        currentMessage = '';
-      }
-    }
-    
-    return messages.filter(m => m.length > 0);
+    return text.split('•')
+      .filter(b => b.trim())
+      .map(b => `• ${b.trim()}`);
   }
 
   cosineSimilarity(a, b) {
@@ -170,7 +152,7 @@ Concise, split answer:`;
 }
 
 async function getEmbedding(text) {
-  const response = await fetch('http://localhost:11434/api/embeddings', {
+  const response = await fetch('http://127.0.0.1:11434/api/embeddings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -213,9 +195,19 @@ async function loadFile(filePath) {
     let text;
     
     if (ext === '.pdf') {
-      const dataBuffer = await fs.readFile(filePath);
-      const pdfData = await pdfParse(dataBuffer);
-      text = pdfData.text;
+      const data = new Uint8Array(await fs.readFile(filePath));
+      const pdf = await getDocument({
+        data,
+        useSystemFonts: true,
+        disableFontFace: true,
+      }).promise;
+
+      text = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map(item => item.str).join(' ');
+      }
     } else if (ext === '.txt' || ext === '.md') {
       text = await fs.readFile(filePath, 'utf-8');
     } else {
@@ -268,7 +260,7 @@ async function setupVectorStore() {
   }
 }
 
-module.exports = { 
+export { 
   setupVectorStore,
   SimpleVectorStore,
   IntentRecognizer,
