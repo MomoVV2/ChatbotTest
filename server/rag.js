@@ -91,27 +91,26 @@ class IntentRecognizer {
   }
 
   async generateDynamicAnswer(intent, contextDocs, query) {
-    const context = contextDocs.map(d => d.pageContent).join('\n');
+    const context = contextDocs.map(d => d.pageContent).join(' ');
     
-    const prompt = `<|im_start|>system
-    You are a mobile-first support bot. Respond ONLY in this format:
-    •[Action] [Details] (max 7 words)
-    Max 3 bullet points. No explanations.<|im_end|>
-    <|im_start|>user
-    ${query}<|im_end|>
-    <|im_start|>assistant
-    `;
+    const prompt = `[STRICT FORMAT] Answer in ONE LINE using "→" separators. 
+    MAX 12 WORDS. NO BULLETS. NO POLITE PHRASES.
+    Example: "Settings → Security → Change password → Follow steps"
+    
+    Question: ${query}
+    Answer: `;
   
     const response = await fetch('http://127.0.0.1:11434/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'deepseek-r1:1.5b',
+        model: 'mistral', // Better at following instructions
         prompt: prompt,
         options: {
-          temperature: 0.3,
-          max_tokens: 80,
-          repeat_penalty: 2.5
+          temperature: 0.1, // Strict output
+          max_tokens: 40, // ~12 word limit
+          repeat_penalty: 3.0,
+          top_k: 5
         }
       })
     });
@@ -131,16 +130,17 @@ class IntentRecognizer {
 
   cleanResponse(text) {
     return text
-      .replace(/[^•\w\s]/g, '') // Remove all punctuation
-      .replace(/\s+/g, ' ')     // Single spaces only
-      .substring(0, 80);        // Hard character limit
+      .replace(/[^→\w\s]/gi, '') // Remove all except arrows/letters
+      .replace(/\s+/g, ' ')      // Collapse spaces
+      .replace(/\s→/g, '→')      // Remove space before arrows
+      .substring(0, 60)          // Hard character limit
+      .trim();
   }
   
 
   splitIntoMessages(text) {
-    return text.split('•')
-      .filter(b => b.trim())
-      .map(b => `• ${b.trim()}`);
+    // Return as single message array
+    return [text];
   }
 
   cosineSimilarity(a, b) {

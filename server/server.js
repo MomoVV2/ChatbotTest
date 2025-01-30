@@ -181,29 +181,14 @@ Context Data:
 ${context}
 
 User Question: ${question}
+- Answer in ONE LINE using "→" between steps
+- MAX 25 WORDS / 80 CHARACTERS
+- NO bullet points, numbers, or line breaks
+- NO USE OF ANY NUMERS FOR STEP BY STEPS
+- WITH explanations OF MAX 20 WORDS
+- Example: To change youre Password go to →Security→ChangePassword there youll be able to change it! tell us if you need more help!
 
-Create a helpful response that:
-- STARTS DIRECTLY WITH THE ANSWER (no greetings)
-- Uses ONLY these formatting elements:
-  • Bullet points starting with "•"
-  • Numbered lists when giving steps
-  • Paragraph breaks with blank lines
-- Keep paragraphs under 3 lines
-- NEVER use markdown, emojis, or special formatting
-- If using bullets/numbering:
-  - Put each item on its own line
-  - Leave a blank line after the list
-
-Example GOOD format:
-To resolve the issue:
-• First do X
-• Then perform Y
-• Finally complete Z
-
-For additional help:
-1. Open settings
-2. Navigate to section A
-3. Enable option B
+Required format for all answers:;
 
 ${context ? 'Use context where relevant' : ''}
 [/INST]`;
