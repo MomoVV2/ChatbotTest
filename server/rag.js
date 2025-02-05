@@ -39,7 +39,7 @@ class SimpleVectorStore {
   similaritySearch(queryVector, k = 3, minScore = 0.75) {
     const scores = this.documents.map((doc, index) => ({
       score: this.cosineSimilarity(queryVector, this.vectors[index]),
-      doc
+      doc,
     }));
 
     return scores
@@ -63,7 +63,7 @@ class IntentRecognizer {
 
   async addIntent(intentName, examples, answer) {
     const embeddings = await Promise.all(
-      examples.map(example => getEmbedding(example))
+      examples.map((example) => getEmbedding(example))
     );
     
     const averageEmbedding = embeddings[0].map((_, i) =>
@@ -72,7 +72,7 @@ class IntentRecognizer {
     
     this.intents.set(intentName, {
       embedding: averageEmbedding,
-      answer
+      answer,
     });
   }
 
@@ -90,17 +90,19 @@ class IntentRecognizer {
     return bestMatch.score >= threshold ? bestMatch : null;
   }
 
+  // This method is retained for potential use.
+  // In your updated conversation system, dynamic answer generation is handled in server.js.
   async generateDynamicAnswer(intent, contextDocs, query) {
-    const context = contextDocs.map(d => d.pageContent).join(' ');
+    const context = contextDocs.map((d) => d.pageContent).join(' ');
     
     const prompt = `[STRICT FORMAT] Answer in ONE LINE using "→" separators. 
-    MAX 12 WORDS. NO BULLETS. NO POLITE PHRASES.
-    Example: "Settings → Security → Change password → Follow steps"
-    
-    Question: ${query}
-    Answer: `;
+MAX 12 WORDS. NO BULLETS. NO POLITE PHRASES.
+Example: "Settings → Security → Change password → Follow steps"
+
+Question: ${query}
+Answer: `;
   
-    const response = await fetch('http://127.0.0.1:11434/api/generate', {
+    const response = await fetch('https://ola.momoh.de/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -108,15 +110,17 @@ class IntentRecognizer {
         prompt: prompt,
         options: {
           temperature: 0.1, // Strict output
-          max_tokens: 40, // ~12 word limit
+          max_tokens: 40,   // ~12 word limit
           repeat_penalty: 3.0,
-          top_k: 5
-        }
-      })
+          top_k: 5,
+        },
+      }),
     });
 
     if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status} - ${await response.text()}`);
+      throw new Error(
+        `LLM API error: ${response.status} - ${await response.text()}`
+      );
     }
 
     const data = await response.json();
@@ -136,7 +140,6 @@ class IntentRecognizer {
       .substring(0, 60)          // Hard character limit
       .trim();
   }
-  
 
   splitIntoMessages(text) {
     // Return as single message array
@@ -152,17 +155,19 @@ class IntentRecognizer {
 }
 
 async function getEmbedding(text) {
-  const response = await fetch('http://127.0.0.1:11434/api/embeddings', {
+  const response = await fetch('https://ola.momoh.de/api/embeddings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'nomic-embed-text',
-      prompt: text
-    })
+      prompt: text,
+    }),
   });
   
   if (!response.ok) {
-    throw new Error(`Embedding error: ${response.status} - ${await response.text()}`);
+    throw new Error(
+      `Embedding error: ${response.status} - ${await response.text()}`
+    );
   }
 
   const data = await response.json();
@@ -180,7 +185,7 @@ function splitText(text) {
   // Fallback to section splitting
   if (chunks.length === 0) {
     const sections = text.split(/(?=\n#+ )|\n\s*\n/);
-    sections.forEach(section => {
+    sections.forEach((section) => {
       const clean = section.trim().replace(/\n+/g, ' ');
       if (clean.length > 50) chunks.push(clean);
     });
@@ -206,7 +211,7 @@ async function loadFile(filePath) {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        text += content.items.map(item => item.str).join(' ');
+        text += content.items.map((item) => item.str).join(' ');
       }
     } else if (ext === '.txt' || ext === '.md') {
       text = await fs.readFile(filePath, 'utf-8');
@@ -214,13 +219,13 @@ async function loadFile(filePath) {
       return [];
     }
 
-    return splitText(text).map(content => 
+    return splitText(text).map((content) =>
       new Document({
         pageContent: content,
         metadata: { 
           source: path.basename(filePath),
           isQA: content.startsWith('Q:')
-        }
+        },
       })
     );
   } catch (error) {
@@ -236,7 +241,7 @@ async function setupVectorStore() {
 
   try {
     const files = await fs.readdir(knowledgePath);
-    const validFiles = files.filter(f => 
+    const validFiles = files.filter((f) =>
       ['.txt', '.md', '.pdf'].includes(path.extname(f).toLowerCase())
     );
 

@@ -13,6 +13,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Configuration paths
 const DATA_DIR = path.join(__dirname, '..');
@@ -23,6 +24,7 @@ let vectorStore;
 let intentRecognizer;
 let AI_PERSONA = {};
 
+// Loads persona configuration from a file.
 async function loadPersonaConfig() {
   try {
     const data = await fs.readFile(PERSONA_FILE, 'utf-8');
@@ -35,7 +37,6 @@ async function loadPersonaConfig() {
     };
     
     let currentKey = '';
-    
     lines.forEach(line => {
       if (line.startsWith('name:')) {
         persona.name = line.replace('name:', '').trim();
@@ -48,7 +49,6 @@ async function loadPersonaConfig() {
         persona.responseGuidelines.push(line.replace('- ', '').trim());
       }
     });
-
     persona.responseGuidelines = persona.responseGuidelines || [];
     return persona;
   } catch (error) {
@@ -61,6 +61,7 @@ async function loadPersonaConfig() {
   }
 }
 
+// Initializes the system by loading the persona config and setting up the vector store.
 async function initializeSystem() {
   try {
     AI_PERSONA = await loadPersonaConfig();
@@ -81,87 +82,113 @@ initializeSystem().catch(error => {
   process.exit(1);
 });
 
+/*
+  Updated /ask endpoint to support conversation history.
+  Expecting a request body like:
+  {
+    "question": "Your question here",
+    "conversation": [
+       { "role": "user", "message": "Hi there!" },
+       { "role": "assistant", "message": "Hello, how can I help?" },
+       ...
+    ]
+  }
+*/
 app.post('/ask', async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Transfer-Encoding', 'chunked');
 
   if (!vectorStore || !intentRecognizer) {
-      res.write(JSON.stringify({ message: "System initializing..." }) + "\n");
-      return res.end();
+    res.write(JSON.stringify({ message: "System initializing..." }) + "\n");
+    return res.end();
   }
 
-  const { question } = req.body;
+  const { question, conversation } = req.body;
   if (!question) {
-      res.write(JSON.stringify({ message: "Error: Question required" }) + "\n");
-      return res.end();
+    res.write(JSON.stringify({ message: "Error: Question required" }) + "\n");
+    return res.end();
   }
 
   try {
-      let responseSent = false;
-      const intent = await intentRecognizer.detectIntent(question);
-      
-      if (intent) {
-          const intentDetails = intentRecognizer.intents.get(intent.name);
-          const intentAnswer = await generateDynamicAnswer(
-              `System answer: ${intentDetails.answer}`,
-              question,
-              AI_PERSONA
-          );
+    let responseSent = false;
+    // Use intent detection if available.
+    const intent = await intentRecognizer.detectIntent(question);
+    
+    if (intent) {
+      const intentDetails = intentRecognizer.intents.get(intent.name);
+      const intentAnswer = await generateDynamicAnswer(
+        `System answer: ${intentDetails.answer}`,
+        question,
+        AI_PERSONA,
+        conversation || []
+      );
 
-          const compactMessages = chunkLines(intentAnswer.split("\n"), 4);
-          compactMessages.forEach(message => {
-              res.write(JSON.stringify({ message }) + "\n");
-          });
-          responseSent = true;
+      const compactMessages = chunkLines(intentAnswer.split("\n"), 4);
+      compactMessages.forEach(message => {
+        res.write(JSON.stringify({ message }) + "\n");
+      });
+      responseSent = true;
+    }
+
+    if (!responseSent) {
+      const queryEmbedding = await getEmbedding(question);
+      const results = vectorStore.similaritySearch(queryEmbedding, 5);
+
+      if (results.length > 0) {
+        const context = results
+          .map(({ doc }, i) => `SOURCE ${i + 1} (${doc.metadata.source}):\n${doc.pageContent}`)
+          .join('\n\n');
+
+        const dbAnswer = await generateDynamicAnswer(
+          context,
+          question,
+          AI_PERSONA,
+          conversation || []
+        );
+        const compactMessages = chunkLines(dbAnswer.split("\n"), 4);
+        compactMessages.forEach(message => {
+          res.write(JSON.stringify({ message }) + "\n");
+        });
+        responseSent = true;
       }
+    }
 
-      if (!responseSent) {
-          const queryEmbedding = await getEmbedding(question);
-          const results = vectorStore.similaritySearch(queryEmbedding, 5);
+    if (!responseSent) {
+      const fallbackAnswer = await generateDynamicAnswer(
+        "I couldn’t find a match, but here’s what I think:",
+        question,
+        AI_PERSONA,
+        conversation || []
+      );
+      const compactMessages = chunkLines(fallbackAnswer.split("\n"), 4);
+      compactMessages.forEach(message => {
+        res.write(JSON.stringify({ message }) + "\n");
+      });
+    }
 
-          if (results.length > 0) {
-              const context = results
-                  .map(({ doc }, i) => `SOURCE ${i + 1} (${doc.metadata.source}):\n${doc.pageContent}`)
-                  .join('\n\n');
-
-              const dbAnswer = await generateDynamicAnswer(context, question, AI_PERSONA);
-              const compactMessages = chunkLines(dbAnswer.split("\n"), 4);
-              compactMessages.forEach(message => {
-                  res.write(JSON.stringify({ message }) + "\n");
-              });
-              responseSent = true;
-          }
-      }
-
-      if (!responseSent) {
-          const fallbackAnswer = await generateDynamicAnswer(
-              "I couldn’t find a match, but here’s what I think:", 
-              question, 
-              AI_PERSONA
-          );
-          const compactMessages = chunkLines(fallbackAnswer.split("\n"), 4);
-          compactMessages.forEach(message => {
-              res.write(JSON.stringify({ message }) + "\n");
-          });
-      }
-
-      res.end();
+    res.end();
   } catch (error) {
-      console.error('ERROR:', error);
-      res.write(JSON.stringify({ message: "An unexpected error occurred. Please try again." }) + "\n");
-      res.end();
+    console.error('ERROR:', error);
+    res.write(JSON.stringify({ message: "An unexpected error occurred. Please try again." }) + "\n");
+    res.end();
   }
 });
 
+// Helper function to chunk lines into groups.
 function chunkLines(lines, maxLines) {
   const chunks = [];
   for (let i = 0; i < lines.length; i += maxLines) {
-      chunks.push(lines.slice(i, i + maxLines).join("\n"));
+    chunks.push(lines.slice(i, i + maxLines).join("\n"));
   }
   return chunks;
 }
 
-async function generateDynamicAnswer(context, question, persona) {
+/*
+  Updated generateDynamicAnswer to support conversation history.
+  The conversationHistory parameter should be an array of objects:
+  [ { role: "user" | "assistant", message: "..." }, ... ]
+*/
+async function generateDynamicAnswer(context, question, persona, conversationHistory = []) {
   try {
     const safePersona = {
       name: persona.name || "Assistant",
@@ -170,8 +197,18 @@ async function generateDynamicAnswer(context, question, persona) {
     };
 
     const guidelines = (safePersona.responseGuidelines || [])
-      .map((g, i) => `${i+1}. ${g}`)
+      .map((g, i) => `${i + 1}. ${g}`)
       .join('\n') || '1. Provide the best possible answer';
+
+    // Build conversation history text if provided.
+    let conversationText = '';
+    if (conversationHistory.length > 0) {
+      conversationText = conversationHistory
+        .map(turn => (turn.role === 'user'
+          ? `User: ${turn.message}`
+          : `Assistant: ${turn.message}`))
+        .join('\n') + '\n';
+    }
 
     const responsePrompt = `[INST] You are ${safePersona.name}, ${safePersona.style}.
 Guidelines:
@@ -180,7 +217,7 @@ ${guidelines}
 Context Data:
 ${context}
 
-User Question: ${question}
+${conversationText}User: ${question}
 - Answer in ONE LINE using "→" between steps
 - MAX 25 WORDS / 80 CHARACTERS
 - NO bullet points, numbers, or line breaks
@@ -189,17 +226,16 @@ User Question: ${question}
 - Example: To change youre Password go to →Security→ChangePassword there youll be able to change it! tell us if you need more help!
 
 Required format for all answers:;
-
 ${context ? 'Use context where relevant' : ''}
 [/INST]`;
 
-    const response = await fetch('http://127.0.0.1:11434/api/generate', {
+    const response = await fetch('https://ola.momoh.de/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'mistral',
         prompt: responsePrompt,
-        stream: false,
+        stream: true, // Enable streaming
         options: {
           temperature: 0.7,
           num_predict: 300,
@@ -218,12 +254,16 @@ ${context ? 'Use context where relevant' : ''}
       throw new Error(`Ollama API error: ${response.status} - ${errorText}`);
     }
 
-    const data = await response.json();
-    if (!data?.response) {
-      throw new Error('Invalid response format from Ollama');
+    // Process streaming response using async iteration.
+    let finalText = '';
+    for await (const chunk of response.body) {
+      finalText += chunk.toString();
+      // Optionally, process each chunk (e.g., log to console).
+      console.log(chunk.toString());
     }
 
-    let finalText = data.response
+    // Clean up the final response.
+    finalText = finalText
       .replace(/\[INST\].*\[\/INST\]/gs, '')
       .trim();
 
@@ -239,7 +279,6 @@ ${context ? 'Use context where relevant' : ''}
       .trim();
 
     return finalText;
-
   } catch (error) {
     console.error('Generation error:', error);
     return `Let's try a different approach... (${error.message})`;
