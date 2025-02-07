@@ -34,11 +34,11 @@ async function loadPersonaConfig() {
       services: [],
       responseGuidelines: [],
       responses: {
-        greeting: "Welcome! I'm the Hanseatic Helper. How can I assist you with your banking needs today?",
-        identity: "I'm the Hanseatic Helper, your dedicated banking assistant focused on providing professional financial support.",
-        services: "I assist with account management, transactions, online banking, card services, and other banking-related matters.",
-        capabilities: "I can help you with account services, transfers, security features, and general banking questions.",
-        default: "How can I assist you with your banking needs today?"
+        greeting: "Hi there! I'm your Hanseatic Helper, ready to assist with all your banking needs!",
+        identity: "I'm your Hanseatic Helper - I'm here to help you with banking, transfers, accounts, and anything else you need!",
+        services: "I handle everything from account management and transfers to cards and security. What can I help you with?",
+        capabilities: "I'm your go-to for all banking needs - transfers, accounts, cards, you name it! What's on your mind?",
+        default: "Let me help you with that! What would you like to know?"
       }
     };
     
@@ -68,11 +68,11 @@ async function loadPersonaConfig() {
       name: "Hanseatic Helper",
       style: "Friendly and professional banking assistant",
       responses: {
-        greeting: "Welcome! I'm the Hanseatic Helper. How can I assist you with your banking needs today?",
-        identity: "I'm the Hanseatic Helper, your dedicated banking assistant.",
-        services: "I assist with banking services and financial matters.",
-        capabilities: "I can help you with banking-related questions and services.",
-        default: "How can I assist you with your banking needs today?"
+        greeting: "Hi there! I'm your Hanseatic Helper, ready to assist with all your banking needs!",
+        identity: "I'm your Hanseatic Helper - I'm here to help you with banking, transfers, accounts, and anything else you need!",
+        services: "I handle everything from account management and transfers to cards and security. What can I help you with?",
+        capabilities: "I'm your go-to for all banking needs - transfers, accounts, cards, you name it! What's on your mind?",
+        default: "Let me help you with that! What would you like to know?"
       }
     };
   }
@@ -98,118 +98,104 @@ initializeSystem().catch(error => {
   process.exit(1);
 });
 
-function getPersonaResponse(question) {
-  question = question.toLowerCase();
-  
-  if (question.includes('who are you') || question.includes('your name')) {
-    return AI_PERSONA.responses.identity;
-  }
-  if (question.includes('what do you do') || question.includes('your job')) {
-    return AI_PERSONA.responses.services;
-  }
-  if (question.includes('help') || question.includes('can you')) {
-    return AI_PERSONA.responses.capabilities;
-  }
-  if (question.length < 10 || question.includes('hi') || question.includes('hello')) {
-    return AI_PERSONA.responses.greeting;
-  }
-  
-  return null;
-}
+
+const commonQuestions = {
+  'who are you': "Hi! I'm your Hanseatic Helper, a banking assistant designed to help you with financial services and banking needs. I can help you with accounts, transfers, and much more!",
+  'what are you': "I'm an AI banking assistant created to help customers with their banking needs. I can assist you with everything from account management to transfers and security features!",
+  'what do you do': "I help customers with their banking needs! Whether it's managing accounts, making transfers, or handling card services - I'm here to assist you. What can I help you with?",
+  'features': "We offer several key features including online banking, secure transfers, card management, and account services. Which area would you like to know more about?",
+  'password': "To change your password, go to Settings→Security→Change Password. You'll need to enter your current password, then your new one. Need help with the process?",
+};
 
 app.post('/ask', async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Transfer-Encoding', 'chunked');
 
-  if (!vectorStore || !intentRecognizer) {
-    res.write(JSON.stringify({ message: "System initializing..." }) + "\n");
-    return res.end();
-  }
-
-  const { question, conversation } = req.body;
+  const { question } = req.body;
   if (!question) {
-    res.write(JSON.stringify({ message: "Error: Question required" }) + "\n");
+    res.write(JSON.stringify({ message: "Could you please ask your question again?" }));
     return res.end();
   }
 
   try {
-    // First check for basic questions that have predefined responses
-    const questionLower = question.toLowerCase();
+    const questionLower = question.toLowerCase().trim();
     let response;
 
-    if (questionLower.includes('who are you') || questionLower.includes('your name')) {
-      response = "I'm the Hanseatic Helper, your dedicated banking assistant focused on providing professional financial support.";
+    // Handle basic identity and location questions directly
+    if (questionLower.includes('who are you')) {
+      response = "Hi! I'm your Hanseatic Helper, a banking assistant designed to help you with financial services and banking needs. I can help you with accounts, transfers, and much more!";
     } 
-    else if (questionLower.includes('what do you do') || questionLower.includes('what can you do')) {
-      response = "I assist with account management, online banking, transactions, card services, and other banking-related matters.";
+    else if (questionLower.match(/where|location|address|where.*you.*at/)) {
+      response = "I'm a digital banking assistant for Hanseatic Bank. While I'm available 24/7 through this app, you can find our physical locations and contact details at hanseaticbank.de→Contact.";
     }
-    else if (questionLower.includes('credit card') || questionLower.includes('card')) {
-      response = "Our credit cards offer various benefits! Visit hanseaticbank.de→Cards for details, or I can help you with specific features and applications.";
+    else if (questionLower.includes('features') || questionLower.includes('what can you do')) {
+      response = "I can help you with online banking, account management, transfers, card services, and security features. Which of these would you like to know more about?";
     }
-    
-    if (response) {
-      res.write(JSON.stringify({ response }));
-      return res.end();
-    }
+    else {
+      // Check FAQ for relevant information
+      const queryEmbedding = await getEmbedding(question);
+      const results = await vectorStore.similaritySearch(queryEmbedding, 1);
+      
+      if (results.length > 0 && results[0].metadata.type === 'qa') {
+        response = results[0].metadata.answer;
+      } else {
+        // For unknown questions, use AI with a strict timeout
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
 
-    // If no predefined response, generate a contextual one
-    const prompt = `[INST] You are the Hanseatic Helper, a professional banking assistant.
-Respond directly to: "${question}"
+        try {
+          const aiResponse = await fetch('https://deep.momoh.de/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'deepseek-r1:1.5b',
+              prompt: `[INST] You are the Hanseatic Helper, a banking assistant.
+Question: "${question}"
+- Answer directly and helpfully
+- You are part of Hanseatic Bank
+- Keep responses under 2 sentences
+- Suggest specific banking services when relevant
+[/INST]`,
+              stream: false,
+              options: {
+                temperature: 0.3,
+                num_predict: 80,
+                repeat_penalty: 1.5,
+                top_k: 40,
+                top_p: 0.9
+              }
+            }),
+            signal: controller.signal
+          });
 
-Rules:
-- Stay in character as a banking assistant
-- Be professional but friendly
-- If unsure, suggest checking hanseaticbank.de
-- Keep responses clear and helpful
-- No thinking out loud
-[/INST]`;
-
-    const aiResponse = await fetch('https://deep.momoh.de/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'deepseek-r1:1.5b',
-        prompt: prompt,
-        stream: false,
-        options: {
-          temperature: 0.7,
-          num_predict: 100,
-          repeat_penalty: 1.5,
-          top_k: 40,
-          top_p: 0.9,
-          mirostat: 1,
-          mirostat_tau: 4.0,
-          mirostat_eta: 0.1,
-          stop: ["<think>", "</think>", "[INST]", "[/INST]"]
+          const data = await aiResponse.json();
+          response = data.response
+            .replace(/<think>[\s\S]*?<\/think>/g, '')
+            .replace(/\n+/g, ' ')
+            .trim();
+        } catch (error) {
+          // If AI times out, give a specific helpful response based on question context
+          if (questionLower.includes('card')) {
+            response = "I can help you with card services including applications, limits, and security features. Which aspect would you like to know more about?";
+          } else if (questionLower.includes('account')) {
+            response = "I can assist you with account management, balances, and settings. What specific information do you need?";
+          } else {
+            response = "I can help you with online banking, transfers, cards, and account services. Which area interests you?";
+          }
+        } finally {
+          clearTimeout(timeout);
         }
-      })
-    });
-
-    if (!aiResponse.ok) {
-      throw new Error(`API error: ${aiResponse.status}`);
+      }
     }
 
-    const data = await aiResponse.json();
-    let finalResponse = data.response || '';
-    
-    // Clean up the response
-    finalResponse = finalResponse
-      .replace(/<think>[\s\S]*?<\/think>/g, '')
-      .replace(/\n+/g, ' ')
-      .replace(/^(Let me|I need to|I should|Okay|Hmm|Well)/i, '')
-      .replace(/^(Hello|Hi|Hey|Greetings)[,!]?\s*/i, '')
-      .trim();
-
-    if (!finalResponse || finalResponse.length < 2) {
-      finalResponse = "I can help you with your banking needs. For specific product information, please visit hanseaticbank.de.";
-    }
-
-    res.write(JSON.stringify({ response: finalResponse }));
+    res.write(JSON.stringify({ response }));
     res.end();
 
   } catch (error) {
     console.error('ERROR:', error);
-    res.write(JSON.stringify({ message: "An unexpected error occurred. Please try again." }) + "\n");
+    res.write(JSON.stringify({ 
+      response: "I can help you with banking services like transfers, accounts, and cards. What would you like to know?" 
+    }));
     res.end();
   }
 });
