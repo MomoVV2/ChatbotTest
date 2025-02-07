@@ -1,133 +1,23 @@
-# Global Trust Bank Customer Support FAQ  
-*Last Updated: [DATE]*  
+Q: What is Global Trust Bank?
+A: Founded in 1969, Global Trust Bank is a digital-first financial institution offering credit cards, personal loans, savings products, and real estate financing. We operate as part of a leading international financial group.
 
----
+Q: How do I change my password?
+A: Go to Settings→Security→Change Password→Enter current and new password→Confirm. For security, use a strong password with mixed characters.
 
-## 🏦 **General Company Information**  
+Q: How do I troubleshoot login issues?
+A: Follow these steps: App Settings→Clear Cache→Restart App→Reset Password if needed→Contact Support if issues persist.
 
-### Q: What is Global Trust Bank?  
-**A:** Founded in 1969, Global Trust Bank is a digital-first financial institution offering credit cards, personal loans, savings products, and real estate financing. We operate as part of a leading international financial group.  
+Q: What security features protect my account?
+A: We use Two-Factor Authentication→Instant Card Controls→End-to-End Encryption→Real-time Fraud Monitoring for maximum security.
 
-### Q: Do you have physical branches?  
-**A:** Most services are accessible via our [banking app](https://www.globaltrustbank.com/) or website. For in-person inquiries, visit:  
-**Global Trust Bank Headquarters**  
-Main Street 123, City Center, Country  
+Q: How do I increase my credit limit?
+A: Navigate to Cards→Manage→Credit Limit Increase→Upload income proof→Wait 2 business days for approval.
 
----
+Q: What are the contact channels for support?
+A: Use App Chat→Call +1 800 123-4567→Email support@globaltrustbank.com depending on your issue urgency.
 
-## 📱 **Banking App Support**  
+Q: How do I report suspicious activity?
+A: Security→Report Fraud→Describe Issue→Upload Evidence→Submit Report. We'll respond within 24 hours.
 
-### Q: What features does the Global Trust Bank app include?  
-**A:**  
-- Real-time credit card management (adjust repayment rates, block cards)  
-- Instant loan application decisions  
-- Secure chat with customer support  
-- Biometric login (Face ID, fingerprint)  
-- Retail partner financing integrations  
-
-### Q: How do I troubleshoot login issues?  
-**Step-by-Step Guide:**  
-1. Ensure your app is updated to the latest version.  
-2. Reset your password using the “Forgot Password” link.  
-3. Clear the app cache (*Settings > Storage > Clear Cache*).  
-4. If problems persist, contact support via [web chat](https://www.globaltrustbank.com/contact).  
-
-### Q: Can I customize app notifications?  
-**A:** Yes! Go to *Profile > Notification Settings* to enable alerts for:  
-- Transaction confirmations  
-- Payment due dates  
-- Security updates  
-
----
-
-## 💳 **Credit Card Support**  
-
-### Q: What’s the difference between BasicCard and PremiumCard?  
-| Feature               | BasicCard          | PremiumCard        |  
-|-----------------------|---------------------|---------------------|  
-| Annual Fee            | €0                  | €49                 |  
-| Rewards               | 0.5% cashback       | 1% cashback + travel insurance |  
-| Foreign Transaction Fee | 1.5%               | 0%                 |  
-
-### Q: How do I increase my credit limit?  
-**A:** Submit a request via the app:  
-1. Navigate to *Cards > Manage > Credit Limit Increase*.  
-2. Upload proof of income (PDF/JPEG).  
-3. Approval typically takes 2 business days.  
-
----
-
-## 🔒 **Security & Fraud Prevention**  
-
-### Q: How do I recognize phishing attempts?  
-**Red Flags:**  
-- Emails/SMS asking for your PIN or CVV.  
-- Links to unofficial domains.  
-- Urgent requests to “verify your account.”  
-
-**Report Suspicious Activity:** Forward the message to [security@globaltrustbank.com](mailto:security@globaltrustbank.com).  
-
-### Q: What security features protect my account?  
-- **Two-Factor Authentication (2FA):** Mandatory for all logins.  
-- **Card Controls:** Freeze/unfreeze cards instantly in the app.  
-- **End-to-End Encryption:** All communications are securely encrypted.  
-
----
-
-## 🏠 **Loans & Financing**  
-
-### Q: What loan terms do you offer?  
-| Loan Type             | Amount Range      | Term       | APR       |  
-|-----------------------|-------------------|------------|-----------|  
-| Personal Loan         | €1,000 – €50,000  | 12-72 mo   | 3.9%–8.9% |  
-| Real Estate Refinance | €50,000 – €500k   | 10-25 yrs  | Custom    |  
-
-### Q: Why was my loan application rejected?  
-**Common Reasons:**  
-- Insufficient credit score (minimum required).  
-- Missing income documentation.  
-- High debt-to-income ratio.  
-
-**Next Steps:** Reapply after 90 days or contact support for a detailed review.  
-
----
-
-## ⚠️ **Troubleshooting Common Issues**  
-
-### Q: The app shows incorrect account balances.  
-**Fix:**  
-1. Pull down to refresh the screen.  
-2. Check for pending transactions under *Activity*.  
-3. If unresolved, clear app data (*Settings > Apps > Global Trust Bank > Clear Data*).  
-
-### Q: I can’t receive SMS verification codes.  
-**Solutions:**  
-- Ensure your phone number is updated in *Profile > Contact Details*.  
-- Disable any third-party SMS blockers.  
-- Request a voice call verification instead.  
-
----
-
-## 📞 **Contact & Escalation**  
-
-### Urgent Support Channels:  
-| Issue Type            | Contact Method                     | Hours               |  
-|-----------------------|------------------------------------|---------------------|  
-| Lost/Stolen Card      | Call **+1 800 123-4567**          | 24/7                |  
-| Fraud Alert           | In-app chat (Priority Queue)      | 6 AM – 10 PM Local  |  
-| Technical Bugs        | Email support@globaltrustbank.com | Response in 24 hrs  |  
-
----
-
-## 🔄 **Recent Updates**  
-- **2023:** Integration with a leading European banking partner (pending regulatory approval).  
-- **2024 Q2:** Planned rollout of joint accounts in the app.  
-
-*For the latest news, visit [Global Trust Bank Updates](https://www.globaltrustbank.com/news).*  
-
---- 
-
-> **Note for Support Agents:**  
-> - Always link to [official terms](https://www.globaltrustbank.com/terms) for legal queries.  
-> - Avoid speculative answers about unannounced products.  
-> - Escalate unresolved complaints to `escalations@globaltrustbank.com`.  
+Q: What features does the banking app include?
+A: Access Account Management→Card Controls→Instant Transfers→Bill Payments→Investment Tools→Support Chat.

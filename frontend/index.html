@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Chatbot</title>
+  <title>Banking Support Chatbot (Prototype)</title>
   <style>
     :root {
       --primary: #e0e0e0;
@@ -119,165 +119,174 @@
   </style>
 </head>
 <body>
-  <h1>Banking Support Chatbot (ProtoType)</h1>
-  <div class="chat-container">
-    <div class="chat-history" id="chatHistory">
-      <div class="message bot-message">
-        Hello! I’m Shiro – an AI here to help you with questions about our app. Ask me anything!
-      </div>
-    </div>
-    <div class="loading" id="loading">
-      ⏳ Analyzing your question...
-    </div>
-    <div class="error" id="error"></div>
-    <div class="input-container">
-      <input type="text" id="questionInput" placeholder="Type your question..." />
-      <button onclick="askQuestion()">Ask</button>
+<h1>Banking Support Chatbot (Prototype)</h1>
+<div class="chat-container">
+  <div class="chat-history" id="chatHistory">
+    <div class="message bot-message">
+      Hello! I'm Shiro – an AI here to help you with questions about our app. Ask me anything!
     </div>
   </div>
+  <div class="loading" id="loading">
+    ⏳ Analyzing your question...
+  </div>
+  <div class="error" id="error"></div>
+  <div class="input-container">
+    <input type="text" id="questionInput" placeholder="Type your question..." />
+    <button onclick="askQuestion()">Ask</button>
+  </div>
+</div>
 
-  <script>
-    const chatHistory = document.getElementById('chatHistory');
-    const questionInput = document.getElementById('questionInput');
-    const loading = document.getElementById('loading');
-    const errorDiv = document.getElementById('error');
-    
-    // Global conversation history maintained on the client.
-    let conversationHistory = [];
-    
-    questionInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') askQuestion();
-    });
-    
-    async function askQuestion() {
-      const question = questionInput.value.trim();
-      if (!question) return;
-      
-      // Update UI and conversation history with user's message.
-      addMessage(question, 'user');
-      conversationHistory.push({ role: 'user', message: question });
-      questionInput.value = '';
-      
-      try {
-        loading.style.display = 'block';
-        errorDiv.textContent = '';
-    
-        // Call your server's /ask endpoint. Adjust URL if needed.
-        const response = await fetch('https://persona.momoh.de/ask', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    question,
-    conversation: conversationHistory
-  })
-});
-    
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    
-        await processStreamedResponse(response);
-    
-      } catch (error) {
-        showError(`Error: ${error.message}`);
-      } finally {
-        loading.style.display = 'none';
-      }
-    }
-    
-    async function processStreamedResponse(response) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let finalMessage = '';
+<script>
+  const chatHistory = document.getElementById('chatHistory');
+  const questionInput = document.getElementById('questionInput');
+  const loading = document.getElementById('loading');
+  const errorDiv = document.getElementById('error');
 
-  // Create and add a typing indicator.
-  const typingIndicator = createTypingIndicator();
-  chatHistory.appendChild(typingIndicator);
-  chatHistory.scrollTop = chatHistory.scrollHeight;
+  let conversationHistory = [];
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+  questionInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') askQuestion();
+  });
 
-      // Decode the new chunk and add it to any previous partial chunk.
-      buffer += decoder.decode(value, { stream: true });
-      // Split by newline (each chunk is terminated by a newline)
-      const lines = buffer.split("\n");
+  async function askQuestion() {
+    const question = questionInput.value.trim();
+    if (!question) return;
 
-      // Process each complete line except the last (which may be partial)
-      for (let i = 0; i < lines.length - 1; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
+    addMessage(question, 'user');
+    conversationHistory.push({ role: 'user', message: question });
+    questionInput.value = '';
 
-        try {
-          // Parse the outer JSON to get the "message" property.
-          const outer = JSON.parse(line);
-          if (outer.message) {
-            // The outer "message" is a JSON string containing one or more inner objects.
-            const innerLines = outer.message.split("\n").filter(l => l.trim() !== "");
-            innerLines.forEach(innerLine => {
-              try {
-                const inner = JSON.parse(innerLine);
-                if (inner.response) {
-                  finalMessage += inner.response;
-                  // Update the typing indicator in real time.
-                  typingIndicator.textContent = finalMessage;
-                }
-              } catch (ex) {
-                console.error("Error parsing inner JSON:", innerLine, ex);
-              }
-            });
-          }
-        } catch (e) {
-          console.error("Error parsing outer JSON chunk:", line, e);
-        }
-      }
-      // Keep any partial line for the next chunk.
-      buffer = lines[lines.length - 1];
-    }
-  } catch (error) {
-    console.error('Stream processing error:', error);
-    showError(`Error: ${error.message}`);
-  } finally {
-    if (typingIndicator.isConnected) {
-      typingIndicator.remove();
+    try {
+      loading.style.display = 'block';
+      errorDiv.textContent = '';
+
+      const response = await fetch('http://localhost:3000/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: question,
+          conversation: conversationHistory
+        })
+      });
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      await processStreamedResponse(response);
+
+    } catch (error) {
+      showError(`Error: ${error.message}`);
+    } finally {
+      loading.style.display = 'none';
     }
   }
 
-  // Once done, add the final message to the chat and update conversation history.
-  addMessage(finalMessage, 'bot');
-  conversationHistory.push({ role: 'assistant', message: finalMessage });
-}
+  async function processStreamedResponse(response) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalMessage = '';
 
-    
-    function createTypingIndicator() {
-      const div = document.createElement('div');
-      div.className = 'message bot-message typing-indicator';
-      div.textContent = '...';
-      return div;
+    const typingIndicator = createTypingIndicator();
+    chatHistory.appendChild(typingIndicator);
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete JSON objects
+        let startIndex = 0;
+        let endIndex;
+
+        while ((endIndex = buffer.indexOf('}', startIndex)) !== -1) {
+          try {
+            const jsonStr = buffer.substring(startIndex, endIndex + 1);
+            const parsed = JSON.parse(jsonStr);
+
+            if (parsed.response && 
+                typeof parsed.response === 'string' && 
+                !parsed.response.includes('<think>') && 
+                !parsed.response.includes('</think>') && 
+                parsed.response.trim() !== '' && 
+                parsed.response !== '\n' && 
+                parsed.response !== '\n\n') {
+              
+              finalMessage += parsed.response;
+              typingIndicator.textContent = finalMessage
+                .replace(/\s+/g, ' ')
+                .trim();
+            }
+
+            startIndex = endIndex + 1;
+          } catch (e) {
+            // If we can't parse the JSON, move to the next character
+            startIndex++;
+          }
+        }
+
+        // Keep the remainder for the next iteration
+        buffer = buffer.substring(startIndex);
+      }
+    } catch (error) {
+      console.error('Stream processing error:', error);
+    } finally {
+      if (typingIndicator.isConnected) {
+        typingIndicator.remove();
+      }
     }
-    
-    function addMessage(text, sender) {
-      const messageDiv = document.createElement('div');
-      messageDiv.className = `message ${sender}-message`;
-    
-      const formattedText = text
-        .replace(/\n/g, '<br>')
-        .replace(/•/g, '•')
-        .replace(/\*{2}(.*?)\*{2}/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>');
-    
-      messageDiv.innerHTML = formattedText;
-      chatHistory.appendChild(messageDiv);
-      chatHistory.scrollTop = chatHistory.scrollHeight;
+
+    if (finalMessage.trim()) {
+      // Clean up the message
+      finalMessage = finalMessage
+        .replace(/\s+/g, ' ')
+        .replace(/([.!?])\s*(?=[A-Z])/g, '$1\n')
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .trim();
+
+      console.log('Final message:', finalMessage);
+      addMessage(finalMessage, 'bot');
+      conversationHistory.push({ role: 'assistant', message: finalMessage });
+    } else {
+      const fallbackMessage = "I apologize, but I couldn't process the response properly. Please try again.";
+      addMessage(fallbackMessage, 'bot');
+      conversationHistory.push({ role: 'assistant', message: fallbackMessage });
     }
-    
-    function showError(message) {
-      errorDiv.textContent = message;
-      setTimeout(() => {
-        errorDiv.textContent = '';
-      }, 5000);
-    }
-  </script>
+  }
+
+  function createTypingIndicator() {
+    const div = document.createElement('div');
+    div.className = 'message bot-message typing-indicator';
+    div.textContent = '...';
+    return div;
+  }
+
+  function addMessage(text, sender) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${sender}-message`;
+
+    const formattedText = text
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line)
+      .join('<br>')
+      .replace(/•/g, '→')
+      .replace(/\*{2}(.*?)\*{2}/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    messageDiv.innerHTML = formattedText;
+    chatHistory.appendChild(messageDiv);
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+  }
+
+  function showError(message) {
+    errorDiv.textContent = message;
+    setTimeout(() => {
+      errorDiv.textContent = '';
+    }, 5000);
+  }
+</script>
 </body>
 </html>
